@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="format-detection" content="telephone=no, date=no, email=no, address=no">
+  <title>1С: Get Databases</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="stylesheet" href="css/styles.css?v=1788505000">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header>
+      <div class="logo-area" id="appLogoArea" title="1C: Get Databases (Ctrl+Alt+Click для управления службами)">
+        <img src="icon.png" alt="1C Database Emblem" class="app-icon">
+        <div>
+          <div class="brand-title">
+            <span class="status-pulse" id="liveStatusPulse" title="Состояние службы"></span>
+            1С: Get Databases
+          </div>
+          <div class="brand-sub">Инвентаризация баз 1С и глубокая инспекция СУБД</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnOpenClusterHealth" class="btn btn-ghost" title="Состояние и диагностика кластеров 1С">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          Кластеры <span id="btnClusterHealthCount"></span>
+        </button>
+        <button id="btnToggleMetrics" class="btn btn-ghost" title="Показать / скрыть панель сводных метрик">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 16l4-4 4 4 5-6"/></svg>
+          Метрики
+        </button>
+        <button id="btnScan" class="btn btn-accent" title="Запустить ручной переопрос всех кластеров 1С">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="scan-icon"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Обновить базы
+        </button>
+        <button id="btnExportExcel" class="btn btn-dark" title="Выгрузить данные в Microsoft Excel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>Excel
+        </button>
+        <button id="btnExportJson" class="btn btn-dark" title="Выгрузить данные в JSON">JSON</button>
+        <a href="/swagger" target="_blank" class="btn btn-ghost" title="OpenAPI / Swagger">API</a>
+      </div>
+    </header>
+
+    <!-- Compact Metrics Strip -->
+    <div class="metrics-strip" id="metricsStrip">
+      <div class="metric-tile">
+        <div class="metric-label">Всего баз 1С</div>
+        <div class="metric-value" id="metricTotal">0</div>
+        <div class="metric-sub" id="metricDevProd">PROD: 0 | DEV: 0</div>
+      </div>
+      <div class="metric-tile metric-card-interactive" id="metricCardClusters" style="cursor: pointer;" title="Нажмите для открытия диагностики состояния кластеров 1С">
+        <div class="metric-label">Кластеров серверов</div>
+        <div class="metric-value" id="metricClusters">0</div>
+        <div class="metric-sub" id="metricClustersSub" style="color: var(--color-pale-stone);">Диагностика ➔</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-label">Серверов СУБД</div>
+        <div class="metric-value" id="metricSqlServers">0</div>
+        <div class="metric-sub" id="metricSqlSub">MS SQL Server</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-label">Покрытие группами AD</div>
+        <div class="metric-value" id="metricAdCoverage">0%</div>
+        <div class="metric-sub" id="metricAdCount">0 с группами AD</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-label">Служба опроса</div>
+        <div class="metric-value" style="font-size: 13px; margin-top: 3px;" id="metricPollingState">Каждые 30 мин</div>
+        <div class="metric-sub" id="metricLastScan">Опрос: -</div>
+      </div>
+    </div>
+
+    <!-- View Tabs: Databases Table vs. Files & Sizes Table -->
+    <div class="view-tabs-strip">
+      <button class="view-tab-btn active" id="tabBtnDatabases" data-view="databases">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; vertical-align: -1px;"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>Информационные базы
+      </button>
+      <button class="view-tab-btn" id="tabBtnFiles" data-view="files">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; vertical-align: -1px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>Файлы и размеры СУБД
+      </button>
+      <button class="view-tab-btn" id="tabBtnServices" data-view="services" style="display: none;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; vertical-align: -1px;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Управление службами 1С
+      </button>
+      <button class="view-tab-btn" id="tabBtnAudit" data-view="audit" style="display: none;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>Журнал аудита
+      </button>
+    </div>
+
+    <!-- Toolbar Strip 1: For Databases Table -->
+    <div class="toolbar-strip" id="toolbarDatabases">
+      <div class="filter-group">
+        <input type="text" id="searchInput" class="form-input search-input" placeholder="Поиск по имени, описанию, кластеру, СУБД или группе AD...">
+        
+        <select id="envSelect" class="form-select" style="width: 105px;">
+          <option value="ALL">Все среды</option>
+          <option value="PROD">PROD</option>
+          <option value="DEV">DEV</option>
+        </select>
+
+        <div class="multiselect-dropdown" id="clusterDropdown" data-placeholder="Все кластеры 1С">
+          <button type="button" class="multiselect-trigger">
+            <span class="multiselect-label">Все кластеры 1С</span>
+            <span class="multiselect-badge" style="display: none;">0</span>
+            <span class="multiselect-arrow">▼</span>
+          </button>
+          <div class="multiselect-menu">
+            <div class="multiselect-search-box">
+              <input type="text" class="multiselect-search-input" placeholder="Поиск кластера...">
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="multiselect-action-btn select-all">Выбрать все</button>
+              <button type="button" class="multiselect-action-btn clear-all">Сбросить</button>
+            </div>
+            <div class="multiselect-options"></div>
+          </div>
+        </div>
+
+        <div class="multiselect-dropdown" id="sqlDropdown" data-placeholder="Все серверы СУБД">
+          <button type="button" class="multiselect-trigger">
+            <span class="multiselect-label">Все серверы СУБД</span>
+            <span class="multiselect-badge" style="display: none;">0</span>
+            <span class="multiselect-arrow">▼</span>
+          </button>
+          <div class="multiselect-menu">
+            <div class="multiselect-search-box">
+              <input type="text" class="multiselect-search-input" placeholder="Поиск сервера СУБД...">
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="multiselect-action-btn select-all">Выбрать все</button>
+              <button type="button" class="multiselect-action-btn clear-all">Сбросить</button>
+            </div>
+            <div class="multiselect-options"></div>
+          </div>
+        </div>
+
+        <div class="multiselect-dropdown" id="platformDropdown" data-placeholder="Все платформы 1С">
+          <button type="button" class="multiselect-trigger">
+            <span class="multiselect-label">Все платформы 1С</span>
+            <span class="multiselect-badge" style="display: none;">0</span>
+            <span class="multiselect-arrow">▼</span>
+          </button>
+          <div class="multiselect-menu">
+            <div class="multiselect-search-box">
+              <input type="text" class="multiselect-search-input" placeholder="Поиск платформы...">
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="multiselect-action-btn select-all">Выбрать все</button>
+              <button type="button" class="multiselect-action-btn clear-all">Сбросить</button>
+            </div>
+            <div class="multiselect-options"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+        <span style="font-family: var(--font-geist-mono); font-size: 10px; text-transform: uppercase; color: var(--color-warm-granite);">Строк:</span>
+        <select id="pageSizeSelect" class="form-select" style="width: 76px;">
+          <option value="ALL" selected>Все</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+          <option value="2500">2500</option>
+          <option value="5000">5000</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Toolbar Strip 2: For Files & Sizes Table -->
+    <div class="toolbar-strip" id="toolbarFiles" style="display: none;">
+      <div class="filter-group">
+        <input type="text" id="filesSearchInput" class="form-input search-input" placeholder="Поиск по базе 1С, базе в СУБД, пути к файлам MDF/LDF или серверу...">
+        
+
+
+        <select id="filesEnvSelect" class="form-select" style="width: 105px;">
+          <option value="ALL">Все среды</option>
+          <option value="PROD">PROD</option>
+          <option value="DEV">DEV</option>
+        </select>
+
+        <div class="multiselect-dropdown" id="filesClusterDropdown" data-placeholder="Все кластеры 1С">
+          <button type="button" class="multiselect-trigger">
+            <span class="multiselect-label">Все кластеры 1С</span>
+            <span class="multiselect-badge" style="display: none;">0</span>
+            <span class="multiselect-arrow">▼</span>
+          </button>
+          <div class="multiselect-menu">
+            <div class="multiselect-search-box">
+              <input type="text" class="multiselect-search-input" placeholder="Поиск кластера...">
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="multiselect-action-btn select-all">Выбрать все</button>
+              <button type="button" class="multiselect-action-btn clear-all">Сбросить</button>
+            </div>
+            <div class="multiselect-options"></div>
+          </div>
+        </div>
+
+        <div class="multiselect-dropdown" id="filesSqlDropdown" data-placeholder="Все серверы СУБД">
+          <button type="button" class="multiselect-trigger">
+            <span class="multiselect-label">Все серверы СУБД</span>
+            <span class="multiselect-badge" style="display: none;">0</span>
+            <span class="multiselect-arrow">▼</span>
+          </button>
+          <div class="multiselect-menu">
+            <div class="multiselect-search-box">
+              <input type="text" class="multiselect-search-input" placeholder="Поиск сервера СУБД...">
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" class="multiselect-action-btn select-all">Выбрать все</button>
+              <button type="button" class="multiselect-action-btn clear-all">Сбросить</button>
+            </div>
+            <div class="multiselect-options"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+        <span style="font-family: var(--font-geist-mono); font-size: 10px; text-transform: uppercase; color: var(--color-warm-granite);">Строк:</span>
+        <select id="filesPageSizeSelect" class="form-select" style="width: 76px;">
+          <option value="ALL" selected>Все</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+          <option value="2500">2500</option>
+          <option value="5000">5000</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Toolbar Strip 3: For Services Management Table -->
+    <div class="toolbar-strip" id="toolbarServices" style="display: none;">
+      <div class="filter-group">
+        <input type="text" id="servicesSearchInput" class="form-input search-input" placeholder="Поиск по серверу, службе, пользователю или пути...">
+        <select id="servicesEnvSelect" class="form-select" style="width: 105px;">
+          <option value="ALL">Все среды</option>
+          <option value="PROD">PROD</option>
+          <option value="DEV">DEV</option>
+        </select>
+        <select id="servicesStatusSelect" class="form-select" style="width: 130px;">
+          <option value="ALL">Все статусы</option>
+          <option value="Running">Работает</option>
+          <option value="Stopped">Остановлена</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+        <button id="btnRefreshServices" class="btn btn-dark btn-sm" title="Обновить список служб 1С">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: -1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>Обновить
+        </button>
+      </div>
+    </div>
+
+    <!-- Toolbar Strip 4: For Audit Log Table -->
+    <div class="toolbar-strip" id="toolbarAudit" style="display: none;">
+      <div class="filter-group">
+        <input type="text" id="auditSearchInput" class="form-input search-input" placeholder="Поиск по IP, серверу, службе, действию или ошибке...">
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+        <button id="btnRefreshAudit" class="btn btn-dark btn-sm" title="Обновить журнал аудита">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: -1px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>Обновить
+        </button>
+      </div>
+    </div>
+
+    <!-- Table Panel: Full Height Fill & Sticky Headers with Multi-Selection -->
+    <div class="table-panel">
+      <!-- Table 1: Main Databases View -->
+      <div id="databasesTableView" class="table-responsive">
+        <table id="mainDatabasesTable">
+          <thead>
+            <tr>
+              <th style="width: 28px; text-align: center;">
+                <input type="checkbox" id="selectAllCheckbox" class="row-checkbox" title="Выбрать все на текущей странице">
+              </th>
+              <th style="width: 30px; text-align: center;">№</th>
+              <th class="sortable" data-sort="env" style="width: 50px;">Среда <span class="sort-icon">⇅</span></th>
+              <th class="sortable" data-sort="name" style="width: 140px;">База 1С <span class="sort-icon">⇅</span></th>
+              <th class="sortable" data-sort="description">Описание <span class="sort-icon">⇅</span></th>
+              <th class="sortable sorted" data-sort="cluster" style="width: 105px;">Кластер <span class="sort-icon">▲</span></th>
+              <th class="sortable" data-sort="platform" style="width: 75px;">Платформа <span class="sort-icon">⇅</span></th>
+              <th class="sortable" data-sort="sql" style="width: 105px;">Сервер СУБД <span class="sort-icon">⇅</span></th>
+              <th class="sortable" data-sort="sqldbname" style="width: 115px;">База в СУБД <span class="sort-icon">⇅</span></th>
+              <th class="sortable" data-sort="accessgroup" style="width: 145px;">Группа AD <span class="sort-icon">⇅</span></th>
+              <th style="width: 85px; text-align: center;">Инфо</th>
+            </tr>
+          </thead>
+          <tbody id="databasesTableBody">
+            <tr>
+              <td colspan="11" style="text-align: center; padding: 0;">
+                <div class="loading-container">
+                  <span class="spinner spinner-lg"></span>
+                  <span>Загрузка информационных баз 1С...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Table 2: Database Files & Sizes View -->
+      <div id="filesTableView" class="table-responsive" style="display: none;">
+        <table id="filesDatabasesTable">
+          <thead>
+            <tr>
+              <th style="width: 28px; text-align: center;">
+                <input type="checkbox" id="selectFilesAllCheckbox" class="row-checkbox" title="Выбрать все на текущей странице">
+              </th>
+              <th style="width: 32px; text-align: center;">№</th>
+              <th class="sortable-files" data-sort="env" style="width: 52px;">Среда <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files" data-sort="name" style="min-width: 140px; width: 170px;">База 1С <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files" data-sort="cluster" style="min-width: 130px; width: 150px;">Кластер 1С <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files" data-sort="sql" style="width: 120px;">Сервер СУБД <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files" data-sort="sqldbname" style="width: 130px;">База в СУБД <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files sorted" data-sort="size" style="width: 110px; text-align: right;">Общий размер (GB) <span class="sort-icon">▼</span></th>
+              <th class="sortable-files" data-sort="data">Файлы данных (MDF / NDF) <span class="sort-icon">⇅</span></th>
+              <th class="sortable-files" data-sort="log" style="width: 240px;">Файл журнала (LDF) <span class="sort-icon">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody id="filesTableBody">
+            <tr>
+              <td colspan="10" style="text-align: center; padding: 0;">
+                <div class="loading-container">
+                  <span class="spinner spinner-lg"></span>
+                  <span>Сбор сведений о размерах и файлах баз данных СУБД...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Table 3: Services Management View -->
+      <div id="servicesTableView" class="table-responsive" style="display: none;">
+        <table id="servicesTable">
+          <thead>
+            <tr>
+              <th style="width: 32px; text-align: center;">№</th>
+              <th class="sortable sortable-services" data-sort="environment" style="width: 52px; text-align: center;">Среда<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="host" style="width: 130px;">Сервер<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="clusterPort" style="width: 75px; text-align: center;">Порт<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="displayName">Служба 1С<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="status" style="width: 95px; text-align: center;">Статус<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="startName" style="width: 140px;">Пользователь<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="clusterDir" style="width: 190px;">Каталог кластера<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-services" data-sort="rasPort" style="width: 85px; text-align: center;">Порт RAS<span class="sort-icon">⇅</span></th>
+              <th style="width: 240px; text-align: center;">Управление службой</th>
+            </tr>
+          </thead>
+          <tbody id="servicesTableBody">
+            <tr>
+              <td colspan="10" style="text-align: center; padding: 30px;">
+                <div class="loading-container">
+                  <span class="spinner spinner-lg"></span>
+                  <span>Опрос служб 1С на серверах...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Table 4: Audit Log View -->
+      <div id="auditTableView" class="table-responsive" style="display: none;">
+        <table id="auditTable">
+          <thead>
+            <tr>
+              <th style="width: 35px; text-align: center;">№</th>
+              <th class="sortable sortable-audit" data-sort="timestamp" style="width: 140px;">Дата и время<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="clientIp" style="width: 115px;">IP клиента<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="host" style="width: 130px;">Сервер:Порт<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="displayName" style="width: 230px;">Служба 1С<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="action" style="width: 135px; text-align: center;">Действие<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="status" style="width: 85px; text-align: center;">Статус<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="durationMs" style="width: 80px; text-align: right;">Время<span class="sort-icon">⇅</span></th>
+              <th class="sortable sortable-audit" data-sort="errorMessage">Результат / Ошибка<span class="sort-icon">⇅</span></th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody">
+            <tr>
+              <td colspan="9" style="text-align: center; padding: 30px;">
+                <div class="loading-container">
+                  <span class="spinner spinner-lg"></span>
+                  <span>Загрузка журнала аудита...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Floating Selection Action Bar -->
+      <div id="selectionActionBar" class="selection-action-bar">
+        <span id="selectedCountBadge" style="font-family: var(--font-geist-mono); font-size: 11px; color: var(--color-metric-green); font-weight: 500;">
+          Выбрано: 0
+        </span>
+        <button id="btnCopySelected" class="btn btn-dark btn-sm" title="Скопировать данные выбранных строк в буфер обмена">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>Скопировать
+        </button>
+        <button id="btnExportSelectedExcel" class="btn btn-accent btn-sm" title="Экспортировать выбранные строки в Excel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>Excel
+        </button>
+        <button id="btnExportSelectedJson" class="btn btn-dark btn-sm" title="Экспортировать выбранные строки в JSON">
+          JSON
+        </button>
+        <button id="btnClearSelection" class="btn btn-ghost btn-sm" title="Снять выделение со всех строк">
+          ✕ Снять
+        </button>
+      </div>
+
+      <!-- Pagination Bar & Build Signature -->
+      <div class="pagination-bar">
+        <div class="pagination-left">
+          <div id="paginationInfo" class="pagination-info">
+            Показано 0 из 0 баз
+          </div>
+          <div class="pagination-controls">
+            <button id="btnPrevPage" class="btn btn-dark btn-sm" disabled>Назад</button>
+            <span id="currentPageBadge" class="mono" style="padding: 2px 8px; font-size: 11px;">1 / 1</span>
+            <button id="btnNextPage" class="btn btn-dark btn-sm" disabled>Вперед</button>
+          </div>
+        </div>
+        <div class="footer-build-signature">
+          <!-- Стильный бейдж версии и даты сборки -->
+          <div class="status-pill status-pill-version" id="footerVersionPill" title="Версия сборки (Ctrl+Alt+Click для журнала аудита)">
+            <span class="version-tag">v1.5.0</span>
+            <span class="version-dot">•</span>
+            <span id="buildDateLabel" class="build-date">04.09.2026</span>
+          </div>
+          <!-- Стильный бейдж Telegram автора -->
+          <a href="https://t.me/DarkSailas" target="_blank" rel="noopener noreferrer" class="status-pill status-pill-link" title="Открыть профиль автора в Telegram: @DarkSailas (https://t.me/DarkSailas)"><svg class="tg-icon" viewBox="0 0 24 24" width="12" height="12" fill="var(--color-metric-green)"><path d="M20.665,3.717 L2.935,10.554 C1.725,11.04 1.732,11.715 2.713,12.016 L7.265,13.436 L17.797,6.791 C18.295,6.488 18.75,6.651 18.376,6.983 L9.843,14.684 L9.53,19.354 C9.99,19.354 10.193,19.143 10.451,18.894 L12.662,16.744 L17.261,20.141 C18.109,20.608 18.718,20.368 18.929,19.356 L21.948,5.128 C22.257,3.889 21.475,3.328 20.665,3.717 Z"/></svg><span class="tg-handle"><span class="tg-at">@</span>DarkSailas</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: Details / DBMS Inspector -->
+  <div id="detailsModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <div id="modalTitle" style="font-size: 15px; font-weight: 600; color: var(--color-bone);">Подробности базы 1С</div>
+          <div id="modalSubtitle" class="mono" style="font-size: 11px; color: var(--color-warm-granite); margin-top: 2px;"></div>
+        </div>
+        <div class="modal-header-actions">
+          <button id="btnExportDetailsExcel" class="btn btn-dark btn-sm" title="Экспорт сведений и файлов базы в Excel">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>Excel
+          </button>
+          <button id="modalMaximize" class="btn btn-ghost btn-sm" title="Развернуть на весь экран / Восстановить">⛶</button>
+          <button id="modalClose" class="btn btn-ghost btn-sm" style="font-size: 14px; padding: 2px 7px;">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-tabs">
+          <button class="tab-btn active" data-tab="tabDbms">СУБД и файлы</button>
+          <button class="tab-btn" data-tab="tabUsers">Пользователи СУБД</button>
+          <button class="tab-btn" data-tab="tabCluster">Кластер 1С</button>
+          <button class="tab-btn" data-tab="tabInfra">Инфраструктура и AD</button>
+        </div>
+
+        <!-- Tab 1: DBMS & Files -->
+        <div id="tabDbms" class="tab-pane active">
+          <div id="dbmsLoadingState" class="loading-container">
+            <span class="spinner spinner-lg"></span>
+            <span>Выполняется инспекция сервера СУБД (файлы на диске, размеры, права)...</span>
+          </div>
+          <div id="dbmsContentState" style="display: none;">
+            <div class="bone-card">
+              <div class="info-grid" id="dbmsSummaryGrid"></div>
+            </div>
+            <div class="metric-label" style="margin-bottom: 6px;">Физические файлы базы данных на сервере СУБД</div>
+            <div class="table-responsive" style="border: 1px solid var(--color-ash-stroke); border-radius: var(--radius-xs); margin-bottom: 8px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Файл (логический)</th>
+                    <th>Тип</th>
+                    <th>Размер (MB)</th>
+                    <th>Размер (GB)</th>
+                    <th>Физический путь на сервере СУБД</th>
+                  </tr>
+                </thead>
+                <tbody id="dbmsFilesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Users & Roles -->
+        <div id="tabUsers" class="tab-pane">
+          <div class="table-responsive" style="border: 1px solid var(--color-ash-stroke); border-radius: var(--radius-xs);">
+            <table>
+              <thead>
+                <tr>
+                  <th>Пользователь / Принципал</th>
+                  <th>Тип учетной записи</th>
+                  <th>Роль / Разрешение</th>
+                  <th>Состояние</th>
+                </tr>
+              </thead>
+              <tbody id="dbmsUsersTableBody">
+                <tr><td colspan="4" style="text-align: center; color: var(--color-warm-granite);">Нет сведений о пользователях СУБД</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 3: Cluster -->
+        <div id="tabCluster" class="tab-pane">
+          <div class="info-grid" id="clusterInfoGrid"></div>
+        </div>
+
+        <!-- Tab 4: Infrastructure & Access -->
+        <div id="tabInfra" class="tab-pane">
+          <div class="info-grid" id="infraInfoGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: AD Group Members Popup (Expanded Wide Layout) -->
+  <div id="adGroupModal" class="modal-overlay">
+    <div class="modal-content modal-content-wide">
+      <div class="modal-header">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="adModalGroupName" style="font-size: 15px; font-weight: 600; color: var(--color-bone);">Группа AD</span>
+            <span id="adModalMemberCount" class="badge badge-ok">0 участников</span>
+          </div>
+          <div id="adModalGroupDesc" class="mono" style="font-size: 11px; color: var(--color-warm-granite); margin-top: 2px;"></div>
+        </div>
+        <div class="modal-header-actions">
+          <button id="btnExportAdMembersExcel" class="btn btn-dark btn-sm" title="Экспорт участников группы в Excel">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>Excel
+          </button>
+          <button id="adModalMaximize" class="btn btn-ghost btn-sm" title="Развернуть на весь экран / Восстановить">⛶</button>
+          <button id="adModalClose" class="btn btn-ghost btn-sm" style="font-size: 14px; padding: 2px 7px;">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div style="margin-bottom: 10px;">
+          <input type="text" id="adMemberSearchInput" class="form-input search-input" style="width: 100%;" placeholder="Поиск участника по ФИО, логину, должности или отделу...">
+        </div>
+
+        <div id="adModalLoading" class="loading-container">
+          <span class="spinner spinner-lg"></span>
+          <span>Запрос состава группы из Active Directory...</span>
+        </div>
+
+        <div id="adModalContent" style="display: none; width: 100%;">
+          <div class="table-responsive" style="max-height: 62vh; border: 1px solid var(--color-ash-stroke); border-radius: var(--radius-xs);">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead style="background: #141312; position: sticky; top: 0; z-index: 5;">
+                <tr>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; width: 35px; text-align: center;">№</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; min-width: 180px;">ФИО / Имя</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; width: 140px;">Логин (SAM)</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; min-width: 160px;">Должность</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; min-width: 160px;">Отдел</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; min-width: 160px;">Email</th>
+                  <th style="padding: 6px 8px; border-bottom: 1px solid #2e2b2a; color: #8a8380; font-family: monospace; font-size: 9.5px; width: 75px; text-align: center;">Статус</th>
+                </tr>
+              </thead>
+              <tbody id="adMembersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  
+
+    <!-- Modal 3: Cluster Health & Diagnostics -->
+  <div id="clusterHealthModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 1280px; width: 96vw; height: 85vh; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-metric-green);"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <div style="font-size: 14px; font-weight: 600; color: var(--color-bone);">Состояние и диагностика кластеров 1С</div>
+          <span id="clusterHealthTotalBadge" class="badge badge-neutral" style="font-size: 10px;">—</span>
+        </div>
+        <div class="modal-header-actions">
+          <button id="btnExportClusterHealthExcel" class="btn btn-dark btn-sm" title="Экспорт диагностики кластеров в Excel">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: -1px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>Excel
+          </button>
+          <button id="clusterHealthClose" class="btn btn-ghost btn-sm" style="font-size: 14px; padding: 2px 7px;">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body" style="padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; flex: 1;">
+        <!-- Cluster Health Filter Toolbar -->
+        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+          <div class="cluster-health-tabs">
+            <button class="ch-tab active" data-filter="all" id="chTabAll">
+              Все <span class="ch-count" id="chCountAll">0</span>
+            </button>
+            <button class="ch-tab" data-filter="online" id="chTabOnline">
+              Онлайн <span class="ch-count" id="chCountOnline">0</span>
+            </button>
+            <button class="ch-tab" data-filter="empty" id="chTabEmpty">
+              Без баз <span class="ch-count" id="chCountEmpty">0</span>
+            </button>
+            <button class="ch-tab" data-filter="offline" id="chTabOffline">
+              Недоступны <span class="ch-count" id="chCountOffline">0</span>
+            </button>
+            <button class="ch-tab" data-filter="logs" id="chTabLogs">
+              Логи опроса <span class="ch-count" id="chCountLogs">0</span>
+            </button>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <input type="text" id="clusterHealthSearch" class="form-input search-input" placeholder="Поиск по серверу, порту, ошибке..." style="width: 240px; height: 25px;">
+            <button id="btnRefreshClusterHealth" class="btn btn-dark btn-sm" style="height: 25px; padding: 2px 8px;" title="Обновить диагностику">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Table Container with Slim Scrollbar -->
+        <div class="table-responsive modal-table-scroll" style="flex: 1; height: 100%; min-height: 250px; overflow-y: auto;">
+          <table class="data-table" id="clusterHealthTable">
+            <thead>
+              <tr style="position: sticky; top: 0; background: #181615; z-index: 5;">
+                <th style="width: 35px; text-align: center;">№</th>
+                <th class="sortable sortable-cluster-health" data-sort="environment" style="width: 65px; text-align: center;">Среда <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="server" style="width: 160px;">Кластер 1С <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="rasAddress" style="width: 150px;">RAS Агент <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="status" style="width: 100px; text-align: center;">Статус <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="platformVersion" style="width: 100px; text-align: center;">Платформа <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="cimStatus" style="width: 170px;">Служба 1С <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-health" data-sort="errorMessage">Диагностика <span class="sort-icon">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody id="clusterHealthTableBody">
+              <tr>
+                <td colspan="8" style="text-align: center; padding: 30px;">
+                  <div class="loading-container">
+                    <span class="spinner spinner-lg"></span>
+                    <span>Опрос состояния кластеров 1С...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Logs Table (Visible when Logs tab is active) -->
+          <table class="data-table" id="clusterLogsTable" style="display: none;">
+            <thead>
+              <tr style="position: sticky; top: 0; background: #181615; z-index: 5;">
+                <th style="width: 35px; text-align: center;">№</th>
+                <th class="sortable sortable-cluster-logs" data-sort="timestamp" style="width: 140px;">Время <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-logs" data-sort="environment" style="width: 65px; text-align: center;">Среда <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-logs" data-sort="server" style="width: 150px;">Сервер / Кластер <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-logs" data-sort="stage" style="width: 110px;">Этап <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-logs" data-sort="level" style="width: 95px; text-align: center;">Уровень <span class="sort-icon">⇅</span></th>
+                <th class="sortable sortable-cluster-logs" data-sort="message">Диагностика / Текст ошибки <span class="sort-icon">⇅</span></th>
+              </tr>
+            </thead>
+            <tbody id="clusterLogsTableBody">
+              <tr>
+                <td colspan="7" style="text-align: center; padding: 30px; color: var(--color-warm-granite);">
+                  Нет зафиксированных ошибок опроса кластеров
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Service Action -->
+  <div id="serviceConfirmModal" class="modal-overlay">
+    <div class="modal-content modal-dialog-confirm">
+      <div class="modal-header">
+        <div style="font-size: 14px; font-weight: 600; color: var(--color-bone);" id="confirmModalTitle">
+          Подтверждение операции
+        </div>
+        <button id="confirmModalClose" class="btn btn-ghost btn-sm" style="font-size: 14px; padding: 2px 7px;">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px 20px;">
+        <div id="confirmModalBodyText" style="font-size: 13px; color: var(--color-pale-stone); line-height: 1.5; margin-bottom: 14px;"></div>
+        <div id="confirmModalWarning" style="display: none; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #fca5a5; line-height: 1.4;"></div>
+        <div id="confirmModalSpinner" style="display: none; text-align: center; padding: 12px 0;">
+          <span class="spinner spinner-md"></span>
+          <span style="margin-left: 8px; font-size: 12px; color: var(--color-bone);" id="confirmModalSpinnerText">Выполнение операции над службой...</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;" id="confirmModalButtons">
+          <button id="btnCancelServiceAction" class="btn btn-dark">Отмена</button>
+          <button id="btnExecuteServiceAction" class="btn btn-accent">Подтвердить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Confirm Database Rescan -->
+  <div id="scanConfirmModal" class="modal-overlay">
+    <div class="modal-content modal-dialog-confirm">
+      <div class="modal-header">
+        <div style="font-size: 14px; font-weight: 600; color: var(--color-bone);">
+          Запуск полного опроса баз 1С
+        </div>
+        <button id="scanConfirmClose" class="btn btn-ghost btn-sm" style="font-size: 14px; padding: 2px 7px;">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px 20px;">
+        <div style="font-size: 13px; color: var(--color-pale-stone); line-height: 1.5; margin-bottom: 14px;">
+          Вы действительно хотите запустить внеочередное полное обновление баз 1С?
+        </div>
+        <div style="background: rgba(238, 96, 24, 0.12); border: 1px solid rgba(238, 96, 24, 0.4); border-radius: 4px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #fdba74; line-height: 1.4;">
+          ⚠️ <strong>Внимание:</strong> Это ресурсоемкий процесс, опрашивающий все кластеры 1С и серверы СУБД в сети предприятия. Сканирование выполняется в фоновом режиме и может занять от 1 до 5 минут.
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
+          <button id="btnCancelScanConfirm" class="btn btn-dark">Отмена</button>
+          <button id="btnProceedScanConfirm" class="btn btn-accent">Запустить опрос</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js?v=1788507000"></script>
+</body>
+</html>
