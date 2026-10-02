@@ -1,0 +1,28 @@
+# Build and publish outputs
+bin/
+obj/
+publish/
+TestResults/
+logs/
+*.log
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Runtime Disk Cache Files
+*.cache.json
+infobases_cache.json
+dbms_files_cache.json
+dbms_details_cache.json
+ad_groups_cache.json
+dbms_summary_rows.json
+
+# Local Environment Overrides
+appsettings.Development.json
+appsettings.Local.json
